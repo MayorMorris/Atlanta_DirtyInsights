@@ -123,17 +123,38 @@ via the same variables/methodology as the `Demographics_Sample` tab — the
 derivation logic was checked against the sample's own numbers (feeding it the
 sample's underlying ACS values reproduces the sample exactly).
 
+Get a free key at `https://api.census.gov/data/key_signup.html` — it's a rate
+limit token, not a billing-linked secret, but it still shouldn't be pasted
+into chat or committed to the repo. Two ways to run the pull:
+
+### Option A: GitHub Actions (no local setup needed)
+
+1. Add the key as a repo secret: **Settings → Secrets and variables →
+   Actions → New repository secret** → name it `CENSUS_API_KEY`, paste the
+   key as the value.
+2. Go to the **Actions** tab → **Pull Census demographics** (in the sidebar)
+   → **Run workflow**.
+3. It pulls the data, rebuilds `public/data/demographics.json`, and commits
+   the result straight to the branch it was run on — nothing else to do.
+   GitHub Actions runners have normal internet access, unlike the sandbox
+   this repo was built in. That said, this workflow (like the script it
+   calls) has only been validated against mocked data, not a real run — it
+   needs the secret only you can set, so this first run is the real test.
+   Check the run's log after triggering it: if every ZIP comes back skipped
+   rather than a handful, something's off (key, ACS year, or a variable
+   code) — paste that log back to me.
+
+### Option B: run it yourself
+
 ```
 CENSUS_API_KEY=xxxx python3 scripts/pull_census_demographics.py   # writes data/source/demographics_full.json
 python3 scripts/build_data.py                                     # merges it into public/data/demographics.json
 ```
 
-Get a free key at `https://api.census.gov/data/key_signup.html`. **This
-script has not been run end-to-end** — outbound access to `api.census.gov`
-is blocked by policy in the sandbox this repo was built in (confirmed via
-direct `curl`: the CONNECT tunnel gets a 403), so it could only be written
-and checked against mocked data, not executed against the live API. Run it
-somewhere with real internet access; a handful of the 334 ZIPs coming back
+Needs a machine with real internet access and `pip install openpyxl shapely`
+first — outbound access to `api.census.gov` is blocked by policy in the
+sandbox this repo was built in (confirmed via direct `curl`: the CONNECT
+tunnel gets a 403). A handful of the 334 ZIPs coming back
 skipped is expected (PO-box/non-residential ZIPs aren't tabulated as ZCTAs),
 but if most or all are skipped, something's off with the key, the
 `CENSUS_ACS_YEAR` vintage (default 2023 — bump it if a newer 5-Year release
