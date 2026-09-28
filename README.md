@@ -114,23 +114,60 @@ the same schema (needs `ZCTA5CE10`/`ZCTA5CE20` and `STATE`/`NAME` property
 keys) will work as a drop-in replacement — the join logic in
 `build_data.py` doesn't care which mirror the polygons came from.
 
-## Known gaps (carried over from `PROJECT_BRIEF.md`, still open)
+## Full demographic coverage (Census API pull)
 
-1. **Full demographic coverage needs a Census API key.** Only ZIP 30291 has
-   real ACS data today (`Demographics_Sample` tab — a template, not full
-   coverage). Once you have a key from
-   `https://api.census.gov/data/key_signup.html`, pull ACS 5-Year tables
-   `B01002` (median age), `B19013` (median household income), `B25077`
-   (median home value), `B11001`/`B09019` (household/family structure) for
-   each ZCTA in `public/data/zip_data_full.json`, write them into
-   `data/source/` in the same shape as `Demographics_Sample`, and extend
-   `build_data.py`'s `build_demographics()` to loop over all of them instead
-   of the one sample row. `app.js`'s demographics layer already iterates
-   `Object.keys(demographics)`, so it will pick up additional ZIPs with no
-   further changes.
-2. **28 ZIPs have no ZCTA boundary** (see above) — inherent gap in the
+`scripts/pull_census_demographics.py` pulls ACS 5-Year estimates (population,
+median age, household income, home value, household size, household/family
+structure, age-mix bands) for every ZIP in `public/data/zip_data_full.json`,
+via the same variables/methodology as the `Demographics_Sample` tab — the
+derivation logic was checked against the sample's own numbers (feeding it the
+sample's underlying ACS values reproduces the sample exactly).
+
+Get a free key at `https://api.census.gov/data/key_signup.html` — it's a rate
+limit token, not a billing-linked secret, but it still shouldn't be pasted
+into chat or committed to the repo. Two ways to run the pull:
+
+### Option A: GitHub Actions (no local setup needed)
+
+1. Add the key as a repo secret: **Settings → Secrets and variables →
+   Actions → New repository secret** → name it `CENSUS_API_KEY`, paste the
+   key as the value.
+2. Go to the **Actions** tab → **Pull Census demographics** (in the sidebar)
+   → **Run workflow**.
+3. It pulls the data, rebuilds `public/data/demographics.json`, and commits
+   the result straight to the branch it was run on — nothing else to do.
+   GitHub Actions runners have normal internet access, unlike the sandbox
+   this repo was built in. That said, this workflow (like the script it
+   calls) has only been validated against mocked data, not a real run — it
+   needs the secret only you can set, so this first run is the real test.
+   Check the run's log after triggering it: if every ZIP comes back skipped
+   rather than a handful, something's off (key, ACS year, or a variable
+   code) — paste that log back to me.
+
+### Option B: run it yourself
+
+```
+CENSUS_API_KEY=xxxx python3 scripts/pull_census_demographics.py   # writes data/source/demographics_full.json
+python3 scripts/build_data.py                                     # merges it into public/data/demographics.json
+```
+
+Needs a machine with real internet access and `pip install openpyxl shapely`
+first — outbound access to `api.census.gov` is blocked by policy in the
+sandbox this repo was built in (confirmed via direct `curl`: the CONNECT
+tunnel gets a 403). A handful of the 334 ZIPs coming back
+skipped is expected (PO-box/non-residential ZIPs aren't tabulated as ZCTAs),
+but if most or all are skipped, something's off with the key, the
+`CENSUS_ACS_YEAR` vintage (default 2023 — bump it if a newer 5-Year release
+is out), or a variable code — paste the error back rather than assuming the
+rest of the pipeline is broken. `app.js`'s demographics layer already
+iterates every ZIP in the file, so no code changes are needed once it's
+populated.
+
+## Other known gaps (carried over from `PROJECT_BRIEF.md`, still open)
+
+1. **28 ZIPs have no ZCTA boundary** (see above) — inherent gap in the
    ZCTA layer, not fixable by rejoining; they remain in the tabular data.
-3. **Dealer coordinates are Google Places-geocoded, not survey-grade** —
+2. **Dealer coordinates are Google Places-geocoded, not survey-grade** —
    accurate enough for an 8-mile radius, per the brief.
 
 ## Data sources
